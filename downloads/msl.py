@@ -1,9 +1,16 @@
 import os
 from ecmwf.opendata import Client
 
-# Zielordner definieren
-output_dir = "data/pmsl"
-os.makedirs(output_dir, exist_ok=True)  # erstellt Ordner, falls nicht vorhanden
+# --- Laufzeit-Infos aus Umgebungsvariablen lesen ---
+date = os.getenv("DATE")        # z. B. "20251105"
+time = int(os.getenv("RUN", 0)) # z. B. 0, 12, etc.
+
+# Datum in ISO-Format (YYYY-MM-DD) umwandeln
+date = f"{date[:4]}-{date[4:6]}-{date[6:8]}"
+
+# --- Zielordner je nach Variable ---
+output_dir = "data/pmsl"  # in msl.py oder ptype.py anpassen
+os.makedirs(output_dir, exist_ok=True)
 
 # ECMWF Open Data Client (AWS Mirror empfohlen)
 client = Client(source="aws")
@@ -11,25 +18,21 @@ client = Client(source="aws")
 # Step-Bereiche gemäß ECMWF-HRES-Definition
 steps = list(range(0, 145, 3)) + list(range(150, 361, 6))
 
-# Datum & Lauf (Beispiel: 00 UTC Lauf vom 2025-11-05)
-date = "2025-11-05"
-time = 0
-
 for step in steps:
-    filename = f"msl_step_{step:03d}.grib2"
+    filename = f"msl_step_{step:03d}.grib2"  # im jeweiligen Script anpassen
     target_path = os.path.join(output_dir, filename)
 
-    print(f"Lade Step +{step:03d}h herunter → {target_path}")
+    print(f"Lade Step +{step:03d}h für {date} {time:02d} UTC → {target_path}")
     try:
         client.retrieve(
             date=date,
             time=time,
             type="fc",
             step=step,
-            param="msl",
+            param="msl",   # im jeweiligen Script anpassen
             target=target_path
         )
     except Exception as e:
         print(f"⚠️ Fehler bei Step {step}: {e}")
 
-print("✅ Alle msl-Daten erfolgreich in data/t2m gespeichert!")
+print("✅ Alle Daten erfolgreich gespeichert!")
