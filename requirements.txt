@@ -1,0 +1,22 @@
+# Kernbibliotheken
+xarray
+cfgrib
+pandas
+matplotlib
+cartopy
+geopandas
+shapely
+adjustText
+
+# ECMWF Open Data Client
+ecmwf-opendata
+
+# Weitere nützliche Helfer
+pyproj
+rasterio
+scipy
+numpy
+pillow
+
+# Damit cfgrib GRIB-Dateien lesen kann (über eccodes)
+eccodes
