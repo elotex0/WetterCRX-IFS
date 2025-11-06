@@ -512,6 +512,8 @@ for filename in sorted(os.listdir(data_dir)):
                 f"{min_val:.0f}",
                 color='blue', fontsize=12, fontweight='bold',
                 ha='center', va='center',
+                transform=ccrs.PlateCarree(),
+                clip_on=True,
                 path_effects=[path_effects.withStroke(linewidth=2, foreground='white')]
             )
 
@@ -523,6 +525,8 @@ for filename in sorted(os.listdir(data_dir)):
                 f"{max_val:.0f}",
                 color='red', fontsize=12, fontweight='bold',
                 ha='center', va='center',
+                transform=ccrs.PlateCarree(),
+                clip_on=True,
                 path_effects=[path_effects.withStroke(linewidth=2, foreground='white')]
             )
 
