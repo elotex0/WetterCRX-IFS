@@ -58,6 +58,10 @@ jobs:
       - name: Run ptype
         run: |
           python downloads/ptype.py
+
+      - name: Run gh
+        run: |
+          python downloads/gh.py
           
       - name: Upload GRIB2 as artifact
         uses: actions/upload-artifact@v4
@@ -74,8 +78,8 @@ jobs:
     needs: fetch_and_generate
     strategy:
       matrix:
-        variable: [t2m, ww, pmsl_eu, pmsl]
-      max-parallel: 4
+        variable: [t2m, ww, pmsl_eu, pmsl, geo_eu]
+      max-parallel: 5
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v3
@@ -100,6 +104,8 @@ jobs:
           input_dir="data/${{ matrix.variable }}"
           if [ "${{ matrix.variable }}" = "pmsl_eu" ]; then
             input_dir="data/pmsl"
+          elif [ "${{ matrix.variable }}" = "geo_eu" ]; then
+            input_dir="data/geo"
           fi
           python scripts/generate_pngs.py \
             "$input_dir" \
