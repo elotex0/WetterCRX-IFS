@@ -703,7 +703,7 @@ for filename in sorted(os.listdir(data_dir)):
         "wind": "Windböen (km/h)",
         "pmsl": "Luftdruck auf Meereshöhe (hPa)",
         "pmsl_eu": "Luftdruck auf Meereshöhe (hPa), Europa",
-        "geo_eu": "Geopotenziale Höhe 500hPa (m), Europa"
+        "geo_eu": "Geopotentielle Höhe 500hPa (m), Europa"
     }
 
     if run_time_utc is not None:
