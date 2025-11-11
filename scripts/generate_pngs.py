@@ -222,6 +222,24 @@ pmsl_colors = LinearSegmentedColormap.from_list(
 )
 pmsl_norm = BoundaryNorm(pmsl_bounds_colors, ncolors=len(pmsl_bounds_colors))
 
+# ------------------------------
+# Geopotenzial
+# ------------------------------
+
+geo_bounds = list(range(4800, 6000, 40))
+geo_colors = LinearSegmentedColormap.from_list(
+    "geo_smooth",
+    [
+        "#530155", "#6F1171", "#871D89", "#9E2C9E", "#B73AB2", "#CB49CD", "#9D3AD2",
+        "#6C2ECF", "#3B20C5", "#0B12B8", "#0D2FC4", "#124FC4", "#136AB7", "#1889C1",
+        "#149A99", "#06B16F", "#10BA4D", "#09CC28", "#FECC0B", "#FEB906", "#F5A40A",
+        "#F09006", "#E38500", "#EB6C01", "#E45C04", "#DC4A01", "#DB3600", "#D42601",
+        "#C31700", "#CB0003", "#4E0703"
+    ],
+    N=len(geo_bounds)
+)
+geo_norm = BoundaryNorm(geo_bounds, ncolors=len(geo_bounds))
+
 
 
 # ------------------------------
@@ -321,6 +339,12 @@ for filename in sorted(os.listdir(data_dir)):
             continue
         data = ds["msl"].values / 100
         data[data < 0] = np.nan
+    elif var_type == "geo_eu":
+        if "gh" not in ds:
+            print(f"Keine geopot-Variable in {filename} ds.keys(): {list(ds.keys())}")
+            continue
+        data = ds["gh"].values
+        data[data < 0] = np.nan
     else:
         print(f"Unbekannter var_type {var_type}")
         continue
@@ -343,7 +367,7 @@ for filename in sorted(os.listdir(data_dir)):
     # --------------------------
     # Figure (Deutschland oder Europa)
     # --------------------------
-    if var_type == "pmsl_eu":
+    if var_type in ["pmsl_eu", "geo_eu"]:
         scale = 0.9
         fig = plt.figure(figsize=(FIG_W_PX/100*scale, FIG_H_PX/100*scale), dpi=100)
         shift_up = 0.02
@@ -363,7 +387,7 @@ for filename in sorted(os.listdir(data_dir)):
         ax.set_aspect('auto')
 
 
-    if var_type == "pmsl_eu":
+    if var_type in ["pmsl_eu", "geo_eu"]:
         target_res = 0.10   # gröber für Europa (~11 km)
         lon_min, lon_max, lat_min, lat_max = extent_eu
         buffer = target_res * 20
@@ -565,11 +589,48 @@ for filename in sorted(os.listdir(data_dir)):
                 path_effects=[path_effects.withStroke(linewidth=2, foreground='white')]
             )
 
+    elif var_type == "geo_eu":
+            im = ax.pcolormesh(lon, lat, data, cmap=geo_colors, norm=geo_norm, shading="auto")
+            data_geo = data  # in m # data schon in hPa
+            main_levels = list(range(4800, 6000, 40))
+            cs = ax.contour(lon, lat, data_geo, levels=main_levels,
+                            colors='white', linewidths=0.8, alpha=0.9)
+            ax.clabel(cs, inline=True, fmt='%d', fontsize=9, colors='black')
+
+            low_levels = list(range(4800, 6000, 10))
+            ax.contour(lon, lat, data_geo, levels=low_levels,
+                            colors='gray', linewidths=0.5, alpha=0.4)
+
+            # Min/Max-Druck markieren (optional)
+            min_idx = np.unravel_index(np.nanargmin(data_geo), data_geo.shape)
+            max_idx = np.unravel_index(np.nanargmax(data_geo), data_geo.shape)
+
+            ax.text(
+                lon[min_idx[1]], lat[min_idx[0]],
+                f"{data_geo[min_idx]:.0f}",
+                color='white', fontsize=11, fontweight='bold',
+                ha='center', va='center',
+                transform=ccrs.PlateCarree(),
+                clip_on=True,
+                path_effects=[path_effects.withStroke(linewidth=1.5, foreground='black')]
+            )
+
+            ax.text(
+                lon[max_idx[1]], lat[max_idx[0]],
+                f"{data_geo[max_idx]:.0f}",
+                color='white', fontsize=11, fontweight='bold',
+                ha='center', va='center',
+                transform=ccrs.PlateCarree(),
+                clip_on=True,
+                path_effects=[path_effects.withStroke(linewidth=2, foreground='black')]
+            )
+    
+
     # ------------------------------
     # Grenzen & Städte
     # ------------------------------
 
-    if var_type == "pmsl_eu":
+    if var_type in ["pmsl_eu", "geo_eu"]:
         # 🌍 Europa: nur Ländergrenzen + europäische Städte
         ax.add_feature(cfeature.BORDERS.with_scale("10m"), edgecolor="black", linewidth=0.7)
         ax.add_feature(cfeature.COASTLINE.with_scale("10m"), edgecolor="black", linewidth=0.7)
@@ -604,8 +665,8 @@ for filename in sorted(os.listdir(data_dir)):
     # Legende
     legend_h_px = 50
     legend_bottom_px = 45
-    if var_type in ["t2m","tp_acc","cape_ml","dbz_cmax","wind","cloud", "pmsl", "pmsl_eu"]:
-        bounds = t2m_bounds if var_type=="t2m" else tp_acc_bounds if var_type=="tp_acc" else wind_bounds if var_type=="wind"else pmsl_bounds_colors if var_type=="pmsl" else pmsl_bounds_colors
+    if var_type in ["t2m","tp_acc","cape_ml","dbz_cmax","wind","cloud", "pmsl", "pmsl_eu", "geo_eu"]:
+        bounds = t2m_bounds if var_type=="t2m" else tp_acc_bounds if var_type=="tp_acc" else wind_bounds if var_type=="wind"else pmsl_bounds_colors if var_type=="pmsl" else pmsl_bounds_colors if var_type=="pmsl_eu" else geo_bounds
         cbar_ax = fig.add_axes([0.03, legend_bottom_px / FIG_H_PX, 0.94, legend_h_px / FIG_H_PX])
         cbar = fig.colorbar(im, cax=cbar_ax, orientation="horizontal", ticks=bounds)
         cbar.ax.tick_params(colors="black", labelsize=7)
@@ -621,6 +682,9 @@ for filename in sorted(os.listdir(data_dir)):
             cbar.set_ticklabels(tick_labels)
         if var_type == "t2m":
             tick_labels = [str(tick) if tick % 4 == 0 else "" for tick in bounds]
+            cbar.set_ticklabels(tick_labels)
+        if var_type == "geo_eu":
+            tick_labels = [str(tick) if tick % 80 == 0 else "" for tick in bounds]
             cbar.set_ticklabels(tick_labels)
 
         if var_type=="tp_acc":
@@ -638,7 +702,8 @@ for filename in sorted(os.listdir(data_dir)):
         "tp_acc": "Akkumulierter Niederschlag (mm)",
         "wind": "Windböen (km/h)",
         "pmsl": "Luftdruck auf Meereshöhe (hPa)",
-        "pmsl_eu": "Luftdruck auf Meereshöhe (hPa), Europa"
+        "pmsl_eu": "Luftdruck auf Meereshöhe (hPa), Europa",
+        "geo_eu": "Geopotenziale Höhe 500hPa (m), Europa"
     }
 
     if run_time_utc is not None:
