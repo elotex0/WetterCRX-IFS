@@ -28,7 +28,7 @@ for step in steps:
             date=date,
             time=time,
             type="fc",
-            levellist="500",
+            levelist="500",
             step=step,
             param="gh",   # im jeweiligen Script anpassen
             target=target_path
