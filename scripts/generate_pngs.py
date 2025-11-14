@@ -292,7 +292,18 @@ for filename in sorted(os.listdir(data_dir)):
             print(f"Keine t2m in {filename}")
             continue
         data = ds["t2m"].values - 273.15
+    elif var_type == "t2m_eu":
+        if "t2m" not in ds:
+            print(f"Keine t2m in {filename}")
+            continue
+        data = ds["t2m"].values - 273.15
     elif var_type == "ww":
+        varname = next((vn for vn in ds.data_vars if vn.lower() in ["ptype","weather"]), None)
+        if varname is None:
+            print(f"Keine WW in {filename}")
+            continue
+        data = ds[varname].values
+    elif var_type == "ww_eu":
         varname = next((vn for vn in ds.data_vars if vn.lower() in ["ptype","weather"]), None)
         if varname is None:
             print(f"Keine WW in {filename}")
@@ -367,7 +378,7 @@ for filename in sorted(os.listdir(data_dir)):
     # --------------------------
     # Figure (Deutschland oder Europa)
     # --------------------------
-    if var_type in ["pmsl_eu", "geo_eu"]:
+    if var_type in ["pmsl_eu", "geo_eu", "t2m_eu", "ww_eu"]:
         scale = 0.9
         fig = plt.figure(figsize=(FIG_W_PX/100*scale, FIG_H_PX/100*scale), dpi=100)
         shift_up = 0.02
@@ -387,7 +398,7 @@ for filename in sorted(os.listdir(data_dir)):
         ax.set_aspect('auto')
 
 
-    if var_type in ["pmsl_eu", "geo_eu"]:
+    if var_type in ["pmsl_eu", "geo_eu", "t2m_eu", "ww_eu"]:
         target_res = 0.10   # gröber für Europa (~11 km)
         lon_min, lon_max, lat_min, lat_max = extent_eu
         buffer = target_res * 20
@@ -407,7 +418,7 @@ for filename in sorted(os.listdir(data_dir)):
     # Nur interpolieren, wenn Daten reguläres 2D-Gitter haben
     if lon.ndim == 1 and lat.ndim == 1 and data.ndim == 2:
         try:
-            if var_type == "ww":
+            if var_type in ["ww", "ww_eu"]:
                 # 🧱 Kategorische Interpolation: nearest-neighbor
                 interp_func = RegularGridInterpolator(
                     (lat[::-1], lon),
@@ -436,8 +447,22 @@ for filename in sorted(os.listdir(data_dir)):
     # Plot
     if var_type == "t2m":
         im = ax.pcolormesh(lon, lat, data, cmap=t2m_colors, norm=t2m_norm, shading="auto")
+    
+    elif var_type == "t2m_eu":
+        im = ax.pcolormesh(lon, lat, data, cmap=t2m_colors, norm=t2m_norm, shading="auto")
         
     elif var_type == "ww":
+        valid_mask = np.isfinite(data)
+        codes = np.unique(data[valid_mask]).astype(int)
+        codes = [c for c in codes if c in ww_colors_base and c not in ignore_codes]
+        codes.sort()
+        cmap = ListedColormap([ww_colors_base[c] for c in codes])
+        code2idx = {c: i for i, c in enumerate(codes)}
+        idx_data = np.full_like(data, fill_value=np.nan, dtype=float)
+        for c,i in code2idx.items():
+            idx_data[data==c]=i
+        im = ax.pcolormesh(lon, lat, idx_data, cmap=cmap, vmin=-0.5, vmax=len(codes)-0.5, shading="auto")
+    elif var_type == "ww_eu":
         valid_mask = np.isfinite(data)
         codes = np.unique(data[valid_mask]).astype(int)
         codes = [c for c in codes if c in ww_colors_base and c not in ignore_codes]
@@ -634,7 +659,7 @@ for filename in sorted(os.listdir(data_dir)):
     # Grenzen & Städte
     # ------------------------------
 
-    if var_type in ["pmsl_eu", "geo_eu"]:
+    if var_type in ["pmsl_eu", "geo_eu", "t2m_eu", "ww_eu"]:
         # 🌍 Europa: nur Ländergrenzen + europäische Städte
         ax.add_feature(cfeature.BORDERS.with_scale("10m"), edgecolor="black", linewidth=0.7)
         ax.add_feature(cfeature.COASTLINE.with_scale("10m"), edgecolor="black", linewidth=0.7)
@@ -669,8 +694,8 @@ for filename in sorted(os.listdir(data_dir)):
     # Legende
     legend_h_px = 50
     legend_bottom_px = 45
-    if var_type in ["t2m","tp_acc","cape_ml","dbz_cmax","wind","cloud", "pmsl", "pmsl_eu", "geo_eu"]:
-        bounds = t2m_bounds if var_type=="t2m" else tp_acc_bounds if var_type=="tp_acc" else wind_bounds if var_type=="wind"else pmsl_bounds_colors if var_type=="pmsl" else pmsl_bounds_colors if var_type=="pmsl_eu" else geo_bounds
+    if var_type in ["t2m","tp_acc","cape_ml","dbz_cmax","wind","cloud", "pmsl", "pmsl_eu", "geo_eu", "t2m_eu"]:
+        bounds = t2m_bounds if var_type=="t2m" else tp_acc_bounds if var_type=="tp_acc" else wind_bounds if var_type=="wind"else pmsl_bounds_colors if var_type=="pmsl" else pmsl_bounds_colors if var_type=="pmsl_eu" else geo_bounds if var_type=="geo_eu" else t2m_bounds
         cbar_ax = fig.add_axes([0.03, legend_bottom_px / FIG_H_PX, 0.94, legend_h_px / FIG_H_PX])
         cbar = fig.colorbar(im, cax=cbar_ax, orientation="horizontal", ticks=bounds)
         cbar.ax.tick_params(colors="black", labelsize=7)
@@ -685,6 +710,9 @@ for filename in sorted(os.listdir(data_dir)):
             tick_labels = [str(tick) if tick % 8 == 0 else "" for tick in bounds]
             cbar.set_ticklabels(tick_labels)
         if var_type == "t2m":
+            tick_labels = [str(tick) if tick % 4 == 0 else "" for tick in bounds]
+            cbar.set_ticklabels(tick_labels)
+        if var_type == "t2m_eu":
             tick_labels = [str(tick) if tick % 4 == 0 else "" for tick in bounds]
             cbar.set_ticklabels(tick_labels)
         if var_type == "geo_eu":
@@ -702,7 +730,9 @@ for filename in sorted(os.listdir(data_dir)):
     footer_ax.axis("off")
     footer_texts = {
         "ww": "Signifikantes Wetter",
+        "ww_eu": "Signifikantes Wetter, Europa",
         "t2m": "Temperatur 2m (°C)",
+        "t2m_eu": "Temperatur 2m (°C), Europa",
         "tp_acc": "Akkumulierter Niederschlag (mm)",
         "wind": "Windböen (km/h)",
         "pmsl": "Luftdruck auf Meereshöhe (hPa)",
