@@ -2,8 +2,8 @@ import os
 from ecmwf.opendata import Client
 
 # --- Laufzeit-Infos aus Umgebungsvariablen lesen ---
-date = os.getenv("DATE")        # z. B. "20251105"
-time = int(os.getenv("RUN", 0)) # z. B. 0, 12, etc.
+date = os.getenv("DATE" "20251113")        # z. B. "20251105"
+time = int(os.getenv("RUN", 12)) # z. B. 0, 12, etc.
 
 # Datum in ISO-Format (YYYY-MM-DD) umwandeln
 date = f"{date[:4]}-{date[4:6]}-{date[6:8]}"
