@@ -47,21 +47,13 @@ jobs:
           # set step output for job output
           echo "run=$RUN" >> $GITHUB_OUTPUT
 
-      - name: Run 2T
+      - name: Download Grib2
         run: |
-          python downloads/2t.py
-
-      - name: Run msl
-        run: |
-          python downloads/msl.py
-
-      - name: Run ptype
-        run: |
-          python downloads/ptype.py
-
-      - name: Run gh
-        run: |
-          python downloads/gh.py
+          python downloads/2t.py &
+          python downloads/msl.py &
+          python downloads/ptype.py &
+          python downloads/gh.py &
+          wait
           
       - name: Upload GRIB2 as artifact
         uses: actions/upload-artifact@v4
