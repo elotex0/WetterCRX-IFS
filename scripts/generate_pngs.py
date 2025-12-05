@@ -310,22 +310,13 @@ for filename in sorted(os.listdir(data_dir)):
             continue
         data = ds[varname].values
     elif var_type == "tp_acc":
-        tp_var = next((vn for vn in ["tp","tot_prec"] if vn in ds), None)
-        if tp_var is None:
-            print(f"Keine Niederschlagsvariable in {filename}")
+        if "tp" not in ds:
+            print(f"Keine tp in {filename}")
             continue
-        lon = ds["longitude"].values
-        lat = ds["latitude"].values
-        tp_all = ds[tp_var].values
-        if tp_all.ndim == 1:
-            ny, nx = len(lat), len(lon)
-            tp_all = tp_all.reshape(ny, nx)
-        elif tp_all.ndim == 3:
-            data = tp_all[3]-tp_all[0] if tp_all.shape[0]>1 else tp_all[0]
-        else:
-            data = tp_all
-        lon2d, lat2d = np.meshgrid(lon, lat)
-        data[data < 0.1] = np.nan
+        data = ds["tp"].values * 1000
+        data[data < 0] = 0
+        cmap, norm = tp_acc_colors, tp_acc_norm
+        cmap.set_under("white")
     elif var_type == "dbz_cmax":
         if "DBZ_CMAX" not in ds:
             print(f"Keine DBZ_CMAX in {filename} ds.keys(): {list(ds.keys())}")
