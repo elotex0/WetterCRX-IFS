@@ -71,8 +71,8 @@ jobs:
     needs: fetch_and_generate
     strategy:
       matrix:
-        variable: [t2m, ww, pmsl_eu, pmsl, geo_eu, ww_eu, t2m_eu]
-      max-parallel: 7
+        variable: [t2m, ww, pmsl_eu, pmsl, geo_eu, ww_eu, t2m_eu, tp_acc]
+      max-parallel: 8
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v3
