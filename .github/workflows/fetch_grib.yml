@@ -54,6 +54,7 @@ jobs:
           python downloads/ptype.py &
           python downloads/gh.py &
           wait
+          python downloads/tp_acc.py
           
       - name: Upload GRIB2 as artifact
         uses: actions/upload-artifact@v4
