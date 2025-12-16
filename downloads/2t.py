@@ -16,7 +16,7 @@ os.makedirs(output_dir, exist_ok=True)
 client = Client(source="aws")
 
 # Step-Bereiche gemäß ECMWF-HRES-Definition
-steps = list(range(0, 145, 3)) + list(range(150, 361, 6))
+steps = list(range(0, 361, 6))
 
 for step in steps:
     filename = f"2t_step_{step:03d}.grib2"  # im jeweiligen Script anpassen
@@ -27,6 +27,7 @@ for step in steps:
         client.retrieve(
             date=date,
             time=time,
+            model="aifs-single"
             type="fc",
             step=step,
             param="2t",   # im jeweiligen Script anpassen
