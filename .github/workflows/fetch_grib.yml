@@ -93,7 +93,7 @@ jobs:
 
       - name: Generate PNGs for ${{ matrix.variable }}
         run: |
-          mkdir -p ecmwf/${{ matrix.variable }}
+          mkdir -p ifs/${{ matrix.variable }}
           input_dir="data/${{ matrix.variable }}"
           if [ "${{ matrix.variable }}" = "pmsl_eu" ]; then
             input_dir="data/pmsl"
@@ -106,15 +106,15 @@ jobs:
           fi
           python scripts/generate_pngs.py \
             "$input_dir" \
-            ecmwf/${{ matrix.variable }} \
+            ifs/${{ matrix.variable }} \
             ${{ matrix.variable }}
 
 
       - name: Upload PNGs artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ecmwf-${{ matrix.variable }}
-          path: ecmwf/${{ matrix.variable }}
+          name: ifs-${{ matrix.variable }}
+          path: ifs/${{ matrix.variable }}
 
   deploy_to_r2:
     runs-on: ubuntu-latest
@@ -126,29 +126,29 @@ jobs:
       - name: Download all PNGs artifact
         uses: actions/download-artifact@v4
         with:
-          pattern: ecmwf-*
-          path: ecmwf_raw
+          pattern: ifs-*
+          path: ifs_raw
 
       - name: Merge PNG folders into one structure
         run: |
-          mkdir -p ecmwf/${{ needs.fetch_and_generate.outputs.run }}
-          for d in ecmwf_raw/*; do
+          mkdir -p ifs/${{ needs.fetch_and_generate.outputs.run }}
+          for d in ifs_raw/*; do
             if [ -d "$d" ]; then
-              varname=$(basename "$d" | sed 's/^ecmwf-//')  # entfernt "ecmwf-" Prefix
-              mkdir -p ecmwf/${{ needs.fetch_and_generate.outputs.run }}/"$varname"
-              cp -r "$d"/* ecmwf/${{ needs.fetch_and_generate.outputs.run }}/"$varname"/ || true
+              varname=$(basename "$d" | sed 's/^ifs-//')  # entfernt "ifs-" Prefix
+              mkdir -p ifs/${{ needs.fetch_and_generate.outputs.run }}/"$varname"
+              cp -r "$d"/* ifs/${{ needs.fetch_and_generate.outputs.run }}/"$varname"/ || true
             fi
           done
 
       - name: Generate Metadata
         run: |
-          python scripts/generate_metadata.py ecmwf/${{ needs.fetch_and_generate.outputs.run }} ${{ needs.fetch_and_generate.outputs.run }} ${{ env.DATE }}
+          python scripts/generate_metadata.py ifs/${{ needs.fetch_and_generate.outputs.run }} ${{ needs.fetch_and_generate.outputs.run }} ${{ env.DATE }}
 
       - name: Clean old runs on R2 except current
         run: |
-          for run_folder in $(aws s3 ls s3://${{ secrets.R2_BUCKET }}/ecmwf/ --endpoint-url https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com | awk '{print $2}' | sed 's#/##'); do
+          for run_folder in $(aws s3 ls s3://${{ secrets.R2_BUCKET }}/ifs/ --endpoint-url https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com | awk '{print $2}' | sed 's#/##'); do
             if [ "$run_folder" != "${{ needs.fetch_and_generate.outputs.run }}/" ]; then
-              aws s3 rm s3://${{ secrets.R2_BUCKET }}/ecmwf/$run_folder --recursive --endpoint-url https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+              aws s3 rm s3://${{ secrets.R2_BUCKET }}/ifs/$run_folder --recursive --endpoint-url https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
             fi
           done
         env:
@@ -158,11 +158,11 @@ jobs:
       - name: Upload current run and metadata.json to R2
         run: |
           # Upload run folder
-          aws s3 sync ./ecmwf/${{ needs.fetch_and_generate.outputs.run }}/ s3://${{ secrets.R2_BUCKET }}/ecmwf/${{ needs.fetch_and_generate.outputs.run }}/ \
+          aws s3 sync ./ifs/${{ needs.fetch_and_generate.outputs.run }}/ s3://${{ secrets.R2_BUCKET }}/ifs/${{ needs.fetch_and_generate.outputs.run }}/ \
             --endpoint-url https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
 
           # Upload metadata.json outside run folder
-          aws s3 cp ./ecmwf/metadata.json s3://${{ secrets.R2_BUCKET }}/ecmwf/metadata.json \
+          aws s3 cp ./ifs/metadata.json s3://${{ secrets.R2_BUCKET }}/ifs/metadata.json \
             --endpoint-url https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
