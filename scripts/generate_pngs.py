@@ -348,10 +348,10 @@ for filename in sorted(os.listdir(data_dir)):
         data = ds["gh"].values
         data[data < 0] = np.nan
     elif var_type == "snow":
-        if "snow" not in ds:
+        if "sd" not in ds:
             print(f"Keine Schneehöhe in {filename}")
             continue
-        data = ds["snow"].values * 100  # m → cm
+        data = ds["sd"].values * 100  # m → cm
     else:
         print(f"Unbekannter var_type {var_type}")
         continue
