@@ -347,6 +347,11 @@ for filename in sorted(os.listdir(data_dir)):
             continue
         data = ds["gh"].values
         data[data < 0] = np.nan
+    elif var_type == "snow":
+        if "snow" not in ds:
+            print(f"Keine Schneehöhe in {filename}")
+            continue
+        data = ds["snow"].values * 100  # m → cm
     else:
         print(f"Unbekannter var_type {var_type}")
         continue
@@ -466,6 +471,8 @@ for filename in sorted(os.listdir(data_dir)):
         im = ax.pcolormesh(lon, lat, idx_data, cmap=cmap, vmin=-0.5, vmax=len(codes)-0.5, shading="auto")
     elif var_type == "tp_acc":
         im = ax.pcolormesh(lon2d, lat2d, data, cmap=tp_acc_colors, norm=tp_acc_norm, shading="auto")
+    elif var_type == "snow":
+        im = ax.pcolormesh(lon, lat, data, cmap=snow_colors, norm=snow_norm, shading="auto")
     elif var_type == "wind":
         im = ax.pcolormesh(lon, lat, data, cmap=wind_colors, norm=wind_norm, shading="auto")
          # ---- Windwerte anzeigen ----
@@ -712,6 +719,8 @@ for filename in sorted(os.listdir(data_dir)):
 
         if var_type=="tp_acc":
             cbar.set_ticklabels([int(tick) if float(tick).is_integer() else tick for tick in tp_acc_bounds])
+        if var_type=="snow":
+            cbar.set_ticklabels([int(tick) if float(tick).is_integer() else tick for tick in snow_bounds])
     else:
         add_ww_legend_bottom(fig, ww_categories, ww_colors_base)
 
@@ -728,7 +737,8 @@ for filename in sorted(os.listdir(data_dir)):
         "wind": "Windböen (km/h)",
         "pmsl": "Luftdruck auf Meereshöhe (hPa)",
         "pmsl_eu": "Luftdruck auf Meereshöhe (hPa), Europa",
-        "geo_eu": "Geopotentielle Höhe 500hPa (m), Europa"
+        "geo_eu": "Geopotentielle Höhe 500hPa (m), Europa",
+        "snow": "Schneehöhe (cm)"
     }
 
     if run_time_utc is not None:
