@@ -54,7 +54,9 @@ jobs:
           python downloads/ptype.py &
           python downloads/gh.py &
           wait
-          python downloads/tp_acc.py
+          python downloads/tp_acc.py &
+          python downloads/snow.py &
+          wait
           
       - name: Upload GRIB2 as artifact
         uses: actions/upload-artifact@v4
@@ -71,8 +73,8 @@ jobs:
     needs: fetch_and_generate
     strategy:
       matrix:
-        variable: [t2m, ww, pmsl_eu, pmsl, geo_eu, ww_eu, t2m_eu, tp_acc]
-      max-parallel: 8
+        variable: [t2m, ww, pmsl_eu, pmsl, geo_eu, ww_eu, t2m_eu, tp_acc, snow]
+      max-parallel: 9
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v3
