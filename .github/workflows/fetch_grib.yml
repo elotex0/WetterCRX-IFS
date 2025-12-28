@@ -56,6 +56,7 @@ jobs:
           wait
           python downloads/tp_acc.py &
           python downloads/snow.py &
+          python downloads/snowcm.py &
           wait
           
       - name: Upload GRIB2 as artifact
@@ -73,8 +74,8 @@ jobs:
     needs: fetch_and_generate
     strategy:
       matrix:
-        variable: [t2m, ww, pmsl_eu, pmsl, geo_eu, ww_eu, t2m_eu, tp_acc, snow]
-      max-parallel: 9
+        variable: [t2m, ww, pmsl_eu, pmsl, geo_eu, ww_eu, t2m_eu, tp_acc, snow, snow1cm, snow2cm]
+      max-parallel: 11
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v3
@@ -105,6 +106,10 @@ jobs:
             input_dir="data/ww"
           elif [ "${{ matrix.variable }}" = "t2m_eu" ]; then
             input_dir="data/t2m"
+          elif [ "${{ matrix.variable }}" = "snow1cm" ]; then
+            input_dir="data/snowcm"
+          elif [ "${{ matrix.variable }}" = "snow2cm" ]; then
+            input_dir="data/snowcm"
           fi
           python scripts/generate_pngs.py \
             "$input_dir" \
