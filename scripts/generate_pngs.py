@@ -240,6 +240,18 @@ geo_colors = LinearSegmentedColormap.from_list(
 )
 geo_norm = BoundaryNorm(geo_bounds, ncolors=len(geo_bounds))
 
+# ------------------------------
+# Schneewahrscheinlichkeit ≥ 2 cm (%)
+# ------------------------------
+snowprob_bounds = [1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]
+snowprob_colors = ListedColormap([
+    "#FE9226", "#FFC02B", "#FFEE32", "#DDE02D", "#BBD629",
+    "#9AC925", "#79BC21", "#37A319", "#367C40",
+    "#366754", "#4A3E7C", "#593192"
+])
+
+snowprob_norm = mcolors.BoundaryNorm(snowprob_bounds, snowprob_colors.N)
+
 
 
 # ------------------------------
@@ -352,6 +364,47 @@ for filename in sorted(os.listdir(data_dir)):
             print(f"Keine Schneehöhe in {filename}")
             continue
         data = ds["sd"].values * 100  # m → cm
+    elif var_type == "snow1cm":
+
+        if "sd" not in ds:
+            print(f"❌ Keine sd in {filename}")
+            continue
+
+        # sd: (number, lat, lon)
+        snow_m = ds["sd"].values * 100  # m → cm
+
+        # Sicherstellen, dass number-Dimension existiert
+        if snow_m.ndim != 3:
+            print("❌ sd hat keine Ensemble-Dimension")
+            continue
+
+        n_member = snow_m.shape[0]
+
+        # 🔥 Wahrscheinlichkeit ≥ 0.1 cm
+        # True/False → 1/0 → Mittelwert → %
+        data = np.mean(snow_m >= 1, axis=0) * 100
+
+        print(f"✔{n_member} ENS-Member ausgewertet")
+    elif var_type == "snow2cm":
+        if "sd" not in ds:
+            print(f"❌ Keine sd in {filename}")
+            continue
+
+        # sd: (number, lat, lon)
+        snow_m = ds["sd"].values * 100  # m → cm
+
+        # Sicherstellen, dass number-Dimension existiert
+        if snow_m.ndim != 3:
+            print("❌ sd hat keine Ensemble-Dimension")
+            continue
+
+        n_member = snow_m.shape[0]
+
+        # 🔥 Wahrscheinlichkeit ≥ 2 cm
+        # True/False → 1/0 → Mittelwert → %
+        data = np.mean(snow_m >= 2, axis=0) * 100
+
+        print(f"✔{n_member} ENS-Member ausgewertet")
     else:
         print(f"Unbekannter var_type {var_type}")
         continue
@@ -473,6 +526,10 @@ for filename in sorted(os.listdir(data_dir)):
         im = ax.pcolormesh(lon2d, lat2d, data, cmap=tp_acc_colors, norm=tp_acc_norm, shading="auto")
     elif var_type == "snow":
         im = ax.pcolormesh(lon, lat, data, cmap=snow_colors, norm=snow_norm, shading="auto")
+    elif var_type == "snow1cm":
+        im = ax.pcolormesh(lon, lat, data, cmap=snowprob_colors, norm=snowprob_norm, shading="auto")
+    elif var_type == "snow2cm":
+        im = ax.pcolormesh(lon, lat, data, cmap=snowprob_colors, norm=snowprob_norm, shading="auto")
     elif var_type == "wind":
         im = ax.pcolormesh(lon, lat, data, cmap=wind_colors, norm=wind_norm, shading="auto")
          # ---- Windwerte anzeigen ----
@@ -692,8 +749,8 @@ for filename in sorted(os.listdir(data_dir)):
     # Legende
     legend_h_px = 50
     legend_bottom_px = 45
-    if var_type in ["t2m","tp_acc","cape_ml","dbz_cmax","wind","cloud", "pmsl", "pmsl_eu", "geo_eu", "t2m_eu", "snow"]:
-        bounds = t2m_bounds if var_type=="t2m" else tp_acc_bounds if var_type=="tp_acc" else wind_bounds if var_type=="wind"else pmsl_bounds_colors if var_type=="pmsl" else pmsl_bounds_colors if var_type=="pmsl_eu" else geo_bounds if var_type=="geo_eu" else t2m_bounds if var_type=="t2m_eu" else snow_bounds
+    if var_type in ["t2m","tp_acc","cape_ml","dbz_cmax","wind","cloud", "pmsl", "pmsl_eu", "geo_eu", "t2m_eu", "snow", "snow1cm", "snow2cm"]:
+        bounds = t2m_bounds if var_type=="t2m" else tp_acc_bounds if var_type=="tp_acc" else wind_bounds if var_type=="wind"else pmsl_bounds_colors if var_type=="pmsl" else pmsl_bounds_colors if var_type=="pmsl_eu" else geo_bounds if var_type=="geo_eu" else t2m_bounds if var_type=="t2m_eu" else snow_bounds if var_type=="snow" else snowprob_bounds if var_type=="snow1cm" else snowprob_bounds 
         cbar_ax = fig.add_axes([0.03, legend_bottom_px / FIG_H_PX, 0.94, legend_h_px / FIG_H_PX])
         cbar = fig.colorbar(im, cax=cbar_ax, orientation="horizontal", ticks=bounds)
         cbar.ax.tick_params(colors="black", labelsize=7)
@@ -738,7 +795,9 @@ for filename in sorted(os.listdir(data_dir)):
         "pmsl": "Luftdruck auf Meereshöhe (hPa)",
         "pmsl_eu": "Luftdruck auf Meereshöhe (hPa), Europa",
         "geo_eu": "Geopotentielle Höhe 500hPa (m), Europa",
-        "snow": "Schneehöhe (cm)"
+        "snow": "Schneehöhe (cm)",
+        "snow1cm": "Schneehöhe ≥ 1cm (%)",
+        "snow2cm": "Schneehöhe ≥ 2cm (%)"
     }
 
     if run_time_utc is not None:
