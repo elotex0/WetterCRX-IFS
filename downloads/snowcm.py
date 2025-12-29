@@ -1,4 +1,5 @@
 import os
+import subprocess
 from ecmwf.opendata import Client
 
 # --- Laufzeit-Infos aus Umgebungsvariablen lesen ---
@@ -18,21 +19,37 @@ client = Client(source="aws")
 # Step-Bereiche gemäß ECMWF-HRES-Definition
 steps = list(range(0, 145, 3)) + list(range(150, 361, 6))
 
-for step in steps:
-    filename = f"snowcm_step_{step:03d}.grib2"  # im jeweiligen Script anpassen
-    target_path = os.path.join(output_dir, filename)
+# --- 1️⃣ Gesamten Download in eine Datei ---
+bigfile = os.path.join(output_dir, "snowcm_all.grib2")
+print(f"⬇️ Lade alle Steps auf einmal nach {bigfile}...")
 
-    print(f"Lade Step +{step:03d}h für {date} {time:02d} UTC → {target_path}")
-    try:
-        client.retrieve(
-            date=date,
-            time=time,
-            type="pf",
-            step=step,
-            param="sd",   # im jeweiligen Script anpassen
-            target=target_path
-        )
-    except Exception as e:
-        print(f"⚠️ Fehler bei Step {step}: {e}")
+try:
+    client.retrieve(
+        date=date,
+        time=time,
+        type="pf",
+        step=steps,
+        param="sd",   # im jeweiligen Script anpassen
+        target=bigfile
+    )
+except Exception as e:
+    print(f"⚠️ Fehler beim Download: {e}")
+    exit(1)
+
+# --- 2️⃣ Splitten nach Step ---
+print("✂️ Splitte große GRIB in einzelne Step-Dateien...")
+try:
+    subprocess.run([
+        "grib_copy",
+        "-w", "stepRange=*",
+        bigfile,
+        os.path.join(output_dir, "snowcm_step_[stepRange].grib2")
+    ], check=True)
+except Exception as e:
+    print(f"⚠️ Fehler beim Split: {e}")
+    exit(1)
+
+# --- 3️⃣ Aufräumen der großen Datei ---
+os.remove(bigfile)
 
 print("✅ Alle Daten erfolgreich gespeichert!")
