@@ -37,7 +37,7 @@ jobs:
         run: |
           HOUR=$(date -u +%H)
           case $HOUR in
-            07|08|09|11|12) RUN=00 ;;
+            07|08|09|11|12|18) RUN=00 ;;
             19|20|21|22) RUN=12 ;;
           esac
           DATE=$(date -u +%Y%m%d)
@@ -56,6 +56,7 @@ jobs:
           wait
           python downloads/tp_acc.py &
           python downloads/snow.py &
+          python downloads/snowcm.py &
           wait
           
       - name: Upload GRIB2 as artifact
@@ -73,8 +74,8 @@ jobs:
     needs: fetch_and_generate
     strategy:
       matrix:
-        variable: [t2m, ww, pmsl_eu, pmsl, geo_eu, ww_eu, t2m_eu, tp_acc, snow]
-      max-parallel: 9
+        variable: [t2m, ww, pmsl_eu, pmsl, geo_eu, ww_eu, t2m_eu, tp_acc, snow, snow1cm, snow2cm]
+      max-parallel: 11
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v3
