@@ -106,6 +106,10 @@ jobs:
             input_dir="data/ww"
           elif [ "${{ matrix.variable }}" = "t2m_eu" ]; then
             input_dir="data/t2m"
+          elif [ "${{ matrix.variable }}" = "snow1cm" ]; then
+            input_dir="data/snowcm"
+          elif [ "${{ matrix.variable }}" = "snow2cm" ]; then
+            input_dir="data/snowcm"
           fi
           python scripts/generate_pngs.py \
             "$input_dir" \
