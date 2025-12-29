@@ -22,7 +22,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 # ------------------------------
 data_dir = sys.argv[1]        # z.B. "output"
 output_dir = sys.argv[2]      # z.B. "output/maps"
-var_type = sys.argv[3]        # 't2m', 'ww', 'tp', 'tp_acc', 'cape_ml', 'dbz_cmax', 'snow2cm'
+var_type = sys.argv[3]        # 't2m', 'ww', 'tp', 'tp_acc', 'cape_ml', 'dbz_cmax'
 os.makedirs(output_dir, exist_ok=True)
 
 # ------------------------------
@@ -98,6 +98,10 @@ N=len(t2m_bounds)
 t2m_norm = BoundaryNorm(t2m_bounds, ncolors=len(t2m_bounds))
 
 # ------------------------------
+# Niederschlags-Farben 1h (tp)
+# ------------------------------
+
+# ------------------------------
 # Aufsummierter Niederschlag (tp_acc)
 # ------------------------------
 tp_acc_bounds = [0.1, 1, 2, 3, 5, 7, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100,
@@ -164,7 +168,8 @@ snow_norm = mcolors.BoundaryNorm(snow_bounds, snow_colors.N)
 #-------------------------------
 #Gesamtbewölkung-Farben
 #------------------------------
-cloud_bounds = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+# Farbskala für Gesamtbewölkung
+cloud_bounds = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]  # in cm
 cloud_colors = ListedColormap([
     "#FFFF00", "#EEEE0B", "#DDDD17", "#CCCC22", "#BBBB2E",
     "#ABAB39", "#9A9A45", "#898950", "#78785C", "#676767"
@@ -174,7 +179,7 @@ cloud_norm = mcolors.BoundaryNorm(cloud_bounds, cloud_colors.N)
 # ------------------------------
 #Gesamtwassergehalt
 # ------------------------------
-twater_bounds = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90]
+twater_bounds = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90]  # in mm
 twater_colors = ListedColormap([
         "#6E4A00", "#B49E62", "#D7CD13", "#B9F019", "#1ACF06",
         "#08534C", "#035DBE", "#2692FF", "#75BAFF", "#CBBFFF",
@@ -187,18 +192,22 @@ twater_norm = mcolors.BoundaryNorm(twater_bounds, twater_colors.N)
 # ------------------------------
 # Schneefallgrenze (SNOWLMT)
 # ------------------------------
+
 snowfall_bounds = [0, 100, 250, 500, 750, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 6000]
 snowfall_colors = ListedColormap([
     "#FF00A6", "#D900FF", "#8C00FF", "#0008FF", "#0099FF",
     "#00F2FF", "#1AFF00", "#FFFB00", "#FFBF00", "#FFA600",
     "#FF6F00", "#930000", 
 ])
+
 snowfall_norm = mcolors.BoundaryNorm(snowfall_bounds, snowfall_colors.N)
 
 # ------------------------------
 # Luftdruck
 # ------------------------------
-pmsl_bounds_colors = list(range(912, 1070, 4))
+
+# Luftdruck-Farben (kontinuierlicher Farbverlauf für 45 Bins)
+pmsl_bounds_colors = list(range(912, 1070, 4))  # Alle 4 hPa (45 Bins)
 pmsl_colors = LinearSegmentedColormap.from_list(
     "pmsl_smooth",
     [
@@ -207,14 +216,16 @@ pmsl_colors = LinearSegmentedColormap.from_list(
        "#07A220", "#3EC008", "#9EE002", "#F3FC01", "#F19806",
        "#F74F11", "#B81212", "#8C3234", "#C87879", "#F9CBCD",
        "#E2E2E2"
+
     ],
-    N=len(pmsl_bounds_colors)
+    N=len(pmsl_bounds_colors)  # Genau 45 Farben für 45 Bins
 )
 pmsl_norm = BoundaryNorm(pmsl_bounds_colors, ncolors=len(pmsl_bounds_colors))
 
 # ------------------------------
 # Geopotenzial
 # ------------------------------
+
 geo_bounds = list(range(4800, 6000, 40))
 geo_colors = LinearSegmentedColormap.from_list(
     "geo_smooth",
@@ -229,16 +240,7 @@ geo_colors = LinearSegmentedColormap.from_list(
 )
 geo_norm = BoundaryNorm(geo_bounds, ncolors=len(geo_bounds))
 
-# ------------------------------
-# Schneewahrscheinlichkeit ≥ 2 cm (%)
-# ------------------------------
-snowprob_bounds = [1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]
-snowprob_colors = ListedColormap([
-    "#FE9226", "#FFC02B", "#FFEE32", "#DDE02D", "#BBD629",
-    "#9AC925", "#79BC21", "#37A319", "#367C40",
-    "#366754", "#4A3E7C", "#593192"
-])
-snowprob_norm = mcolors.BoundaryNorm(snowprob_bounds, snowprob_colors.N)
+
 
 # ------------------------------
 # Kartenparameter
@@ -248,7 +250,9 @@ BOTTOM_AREA_PX = 179
 TOP_AREA_PX = FIG_H_PX - BOTTOM_AREA_PX
 TARGET_ASPECT = FIG_W_PX / TOP_AREA_PX
 
+# Bounding Box Deutschland (fix, keine GeoJSON nötig)
 extent = [5, 16, 47, 56]
+
 extent_eu = [-23.5, 45.0, 29.5, 68.4]
 
 # ------------------------------
@@ -274,172 +278,99 @@ def add_ww_legend_bottom(fig, ww_categories, ww_colors_base):
         legend_ax.text((x0 + x1)/2, 0.05, label, ha='center', va='bottom', fontsize=10)
 
 # ------------------------------
-# Dateien pro Step sammeln
+# Dateien durchgehen
 # ------------------------------
-import re
-step_files = {}
-for filename in os.listdir(data_dir):
-    if filename.endswith(".grib2"):
-        m = re.search(r"sd_step_(\d+)", filename)
-        if m:
-            step = int(m.group(1))
-            step_files.setdefault(step, []).append(os.path.join(data_dir, filename))
+for filename in sorted(os.listdir(data_dir)):
+    if not filename.endswith(".grib2"):
+        continue
+    path = os.path.join(data_dir, filename)
+    ds = cfgrib.open_dataset(path)
 
-# ------------------------------
-# Schrittweise alle Member laden und auswerten
-# ------------------------------
-for step, files in sorted(step_files.items()):
-    # 🔥 Für Ensemble-Variablen (snow1cm, snow2cm): alle Member sammeln
-    if var_type in ["snow1cm", "snow2cm"]:
-        lon, lat = None, None
-        run_time_utc, valid_time_utc = None, None
-        threshold = 1 if var_type == "snow1cm" else 2
-        
-        # 🚀 Erst Metadaten aus erstem File holen
-        first_ds = cfgrib.open_dataset(files[0])
-        if "sd" in first_ds:
-            lon = first_ds["longitude"].values
-            lat = first_ds["latitude"].values
-            run_time_utc = pd.to_datetime(first_ds["time"].values) if "time" in first_ds else None
-            if "valid_time" in first_ds:
-                valid_time_raw = first_ds["valid_time"].values
-                valid_time_utc = pd.to_datetime(valid_time_raw[0]) if np.ndim(valid_time_raw) > 0 else pd.to_datetime(valid_time_raw)
-            else:
-                step_td = pd.to_timedelta(first_ds["step"].values[0])
-                valid_time_utc = run_time_utc + step_td
-            
-            # 🚀 Shape vorher bestimmen für Pre-Allocation
-            first_snow = first_ds["sd"].values
-            if first_snow.ndim == 3:
-                shape = (len(files), first_snow.shape[1], first_snow.shape[2])
-            else:
-                shape = (len(files), first_snow.shape[0], first_snow.shape[1])
-        else:
+    # Daten je Typ
+    if var_type == "t2m":
+        if "t2m" not in ds:
+            print(f"Keine t2m in {filename}")
             continue
-
-        # 🚀 Pre-allocated Array (viel schneller als append + vstack)
-        snow_all = np.empty(shape, dtype=np.float32)
-        n_valid = 0
-
-        for i, path in enumerate(files):
-            ds = cfgrib.open_dataset(path)
-            if "sd" not in ds:
-                continue
-            
-            snow_m = ds["sd"].values
-            
-            # 🚀 Direkt in cm umrechnen und ins Array schreiben
-            if snow_m.ndim == 3:
-                snow_all[n_valid] = snow_m[0] * 100
-            else:
-                snow_all[n_valid] = snow_m * 100
-            
-            n_valid += 1
-
-        if n_valid == 0:
+        data = ds["t2m"].values - 273.15
+    elif var_type == "t2m_eu":
+        if "t2m" not in ds:
+            print(f"Keine t2m in {filename}")
             continue
-
-        # 🚀 Nur verwendete Members nutzen
-        snow_all = snow_all[:n_valid]
-        
-        # 🚀 Vektorisierte Berechnung (schneller als np.mean mit bool)
-        data = np.sum(snow_all >= threshold, axis=0) / n_valid * 100
-        
-        print(f"Step {step}: {n_valid} Ensemble-Member ausgewertet (≥{threshold}cm)")
-        valid_time_local = valid_time_utc.tz_localize("UTC").tz_convert(ZoneInfo("Europe/Berlin"))
-
+        data = ds["t2m"].values - 273.15
+    elif var_type == "ww":
+        varname = next((vn for vn in ds.data_vars if vn.lower() in ["ptype","weather"]), None)
+        if varname is None:
+            print(f"Keine WW in {filename}")
+            continue
+        data = ds[varname].values
+    elif var_type == "ww_eu":
+        varname = next((vn for vn in ds.data_vars if vn.lower() in ["ptype","weather"]), None)
+        if varname is None:
+            print(f"Keine WW in {filename}")
+            continue
+        data = ds[varname].values
+    elif var_type == "tp_acc":
+        if "tp" not in ds:
+            print(f"Keine tp in {filename}")
+            continue
+        data = ds["tp"].values * 1000
+        data[data < 0] = 0
+        cmap, norm = tp_acc_colors, tp_acc_norm
+        cmap.set_under("white")
+    elif var_type == "dbz_cmax":
+        if "DBZ_CMAX" not in ds:
+            print(f"Keine DBZ_CMAX in {filename} ds.keys(): {list(ds.keys())}")
+            continue
+        data = ds["DBZ_CMAX"].values[0,:,:]
+    elif var_type == "wind":
+        if "fg10" not in ds:
+            print(f"Keine passende Windvariable in {filename} ds.keys(): {list(ds.keys())}")
+            continue
+        data = ds["fg10"].values
+        data[data < 0] = np.nan
+        data = data * 3.6  # m/s → km/h
+    elif var_type == "pmsl":
+        if "msl" not in ds:
+            print(f"Keine prmsl-Variable in {filename} ds.keys(): {list(ds.keys())}")
+            continue
+        data = ds["msl"].values / 100
+        data[data < 0] = np.nan
+    elif var_type == "pmsl_eu":
+        if "msl" not in ds:
+            print(f"Keine msl-Variable in {filename} ds.keys(): {list(ds.keys())}")
+            continue
+        data = ds["msl"].values / 100
+        data[data < 0] = np.nan
+    elif var_type == "geo_eu":
+        if "gh" not in ds:
+            print(f"Keine geopot-Variable in {filename} ds.keys(): {list(ds.keys())}")
+            continue
+        data = ds["gh"].values
+        data[data < 0] = np.nan
+    elif var_type == "snow":
+        if "sd" not in ds:
+            print(f"Keine Schneehöhe in {filename}")
+            continue
+        data = ds["sd"].values * 100  # m → cm
     else:
-        # 🔥 Standard-Variablen: nur eine Datei pro Step
-        for filename in files:
-            path = os.path.join(data_dir, filename)
-            ds = cfgrib.open_dataset(path)
+        print(f"Unbekannter var_type {var_type}")
+        continue
 
-        # Daten je Typ
-        if var_type == "t2m":
-            if "t2m" not in ds:
-                print(f"Keine t2m in {filename}")
-                continue
-            data = ds["t2m"].values - 273.15
-        elif var_type == "t2m_eu":
-            if "t2m" not in ds:
-                print(f"Keine t2m in {filename}")
-                continue
-            data = ds["t2m"].values - 273.15
-        elif var_type == "ww":
-            varname = next((vn for vn in ds.data_vars if vn.lower() in ["ptype","weather"]), None)
-            if varname is None:
-                print(f"Keine WW in {filename}")
-                continue
-            data = ds[varname].values
-        elif var_type == "ww_eu":
-            varname = next((vn for vn in ds.data_vars if vn.lower() in ["ptype","weather"]), None)
-            if varname is None:
-                print(f"Keine WW in {filename}")
-                continue
-            data = ds[varname].values
-        elif var_type == "tp_acc":
-            if "tp" not in ds:
-                print(f"Keine tp in {filename}")
-                continue
-            data = ds["tp"].values * 1000
-            data[data < 0] = 0
-            cmap, norm = tp_acc_colors, tp_acc_norm
-            cmap.set_under("white")
-        elif var_type == "dbz_cmax":
-            if "DBZ_CMAX" not in ds:
-                print(f"Keine DBZ_CMAX in {filename} ds.keys(): {list(ds.keys())}")
-                continue
-            data = ds["DBZ_CMAX"].values[0,:,:]
-        elif var_type == "wind":
-            if "fg10" not in ds:
-                print(f"Keine passende Windvariable in {filename} ds.keys(): {list(ds.keys())}")
-                continue
-            data = ds["fg10"].values
-            data[data < 0] = np.nan
-            data = data * 3.6  # m/s → km/h
-        elif var_type == "pmsl":
-            if "msl" not in ds:
-                print(f"Keine prmsl-Variable in {filename} ds.keys(): {list(ds.keys())}")
-                continue
-            data = ds["msl"].values / 100
-            data[data < 0] = np.nan
-        elif var_type == "pmsl_eu":
-            if "msl" not in ds:
-                print(f"Keine msl-Variable in {filename} ds.keys(): {list(ds.keys())}")
-                continue
-            data = ds["msl"].values / 100
-            data[data < 0] = np.nan
-        elif var_type == "geo_eu":
-            if "gh" not in ds:
-                print(f"Keine geopot-Variable in {filename} ds.keys(): {list(ds.keys())}")
-                continue
-            data = ds["gh"].values
-            data[data < 0] = np.nan
-        elif var_type == "snow":
-            if "sd" not in ds:
-                print(f"Keine Schneehöhe in {filename}")
-                continue
-            data = ds["sd"].values * 100  # m → cm
-        else:
-            print(f"Unbekannter var_type {var_type}")
-            continue
+    if data.ndim==3:
+        data=data[0]
 
-        if data.ndim==3:
-            data=data[0]
+    lon = ds["longitude"].values
+    lat = ds["latitude"].values
+    run_time_utc = pd.to_datetime(ds["time"].values) if "time" in ds else None
 
-        lon = ds["longitude"].values
-        lat = ds["latitude"].values
-        run_time_utc = pd.to_datetime(ds["time"].values) if "time" in ds else None
+    if "valid_time" in ds:
+        valid_time_raw = ds["valid_time"].values
+        valid_time_utc = pd.to_datetime(valid_time_raw[0]) if np.ndim(valid_time_raw) > 0 else pd.to_datetime(valid_time_raw)
+    else:
+        step = pd.to_timedelta(ds["step"].values[0])
+        valid_time_utc = run_time_utc + step
+    valid_time_local = valid_time_utc.tz_localize("UTC").astimezone(ZoneInfo("Europe/Berlin"))
 
-        if "valid_time" in ds:
-            valid_time_raw = ds["valid_time"].values
-            valid_time_utc = pd.to_datetime(valid_time_raw[0]) if np.ndim(valid_time_raw) > 0 else pd.to_datetime(valid_time_raw)
-        else:
-            step = pd.to_timedelta(ds["step"].values[0])
-            valid_time_utc = run_time_utc + step
-        valid_time_local = valid_time_utc.tz_localize("UTC").tz_convert(ZoneInfo("Europe/Berlin"))
-
-        
     # --------------------------
     # Figure (Deutschland oder Europa)
     # --------------------------
@@ -542,10 +473,6 @@ for step, files in sorted(step_files.items()):
         im = ax.pcolormesh(lon2d, lat2d, data, cmap=tp_acc_colors, norm=tp_acc_norm, shading="auto")
     elif var_type == "snow":
         im = ax.pcolormesh(lon, lat, data, cmap=snow_colors, norm=snow_norm, shading="auto")
-    elif var_type == "snow1cm":
-        im = ax.pcolormesh(lon, lat, data, cmap=snowprob_colors, norm=snowprob_norm, shading="auto")
-    elif var_type == "snow2cm":
-        im = ax.pcolormesh(lon, lat, data, cmap=snowprob_colors, norm=snowprob_norm, shading="auto")
     elif var_type == "wind":
         im = ax.pcolormesh(lon, lat, data, cmap=wind_colors, norm=wind_norm, shading="auto")
          # ---- Windwerte anzeigen ----
@@ -765,8 +692,8 @@ for step, files in sorted(step_files.items()):
     # Legende
     legend_h_px = 50
     legend_bottom_px = 45
-    if var_type in ["t2m","tp_acc","cape_ml","dbz_cmax","wind","cloud", "pmsl", "pmsl_eu", "geo_eu", "t2m_eu", "snow", "snow1cm", "snow2cm"]:
-        bounds = t2m_bounds if var_type=="t2m" else tp_acc_bounds if var_type=="tp_acc" else wind_bounds if var_type=="wind"else pmsl_bounds_colors if var_type=="pmsl" else pmsl_bounds_colors if var_type=="pmsl_eu" else geo_bounds if var_type=="geo_eu" else t2m_bounds if var_type=="t2m_eu" else snow_bounds if var_type=="snow" else snowprob_bounds if var_type=="snow1cm" else snowprob_bounds 
+    if var_type in ["t2m","tp_acc","cape_ml","dbz_cmax","wind","cloud", "pmsl", "pmsl_eu", "geo_eu", "t2m_eu", "snow"]:
+        bounds = t2m_bounds if var_type=="t2m" else tp_acc_bounds if var_type=="tp_acc" else wind_bounds if var_type=="wind"else pmsl_bounds_colors if var_type=="pmsl" else pmsl_bounds_colors if var_type=="pmsl_eu" else geo_bounds if var_type=="geo_eu" else t2m_bounds if var_type=="t2m_eu" else snow_bounds
         cbar_ax = fig.add_axes([0.03, legend_bottom_px / FIG_H_PX, 0.94, legend_h_px / FIG_H_PX])
         cbar = fig.colorbar(im, cax=cbar_ax, orientation="horizontal", ticks=bounds)
         cbar.ax.tick_params(colors="black", labelsize=7)
@@ -811,9 +738,7 @@ for step, files in sorted(step_files.items()):
         "pmsl": "Luftdruck auf Meereshöhe (hPa)",
         "pmsl_eu": "Luftdruck auf Meereshöhe (hPa), Europa",
         "geo_eu": "Geopotentielle Höhe 500hPa (m), Europa",
-        "snow": "Schneehöhe (cm)",
-        "snow1cm": "Schneehöhe ≥ 1cm (%)",
-        "snow2cm": "Schneehöhe ≥ 2cm (%)"
+        "snow": "Schneehöhe (cm)"
     }
 
     if run_time_utc is not None:
