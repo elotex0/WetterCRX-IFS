@@ -323,12 +323,19 @@ for filename in sorted(os.listdir(data_dir)):
             continue
         data = ds["DBZ_CMAX"].values[0,:,:]
     elif var_type == "wind":
-        if "fg10" not in ds:
+        if "max_i10fg" not in ds:
             print(f"Keine passende Windvariable in {filename} ds.keys(): {list(ds.keys())}")
             continue
-        data = ds["fg10"].values
+        data = ds["max_i10fg"].values
         data[data < 0] = np.nan
         data = data * 3.6  # m/s → km/h
+    elif var_type == "wind_eu":
+        if "max_i10fg" not in ds:
+            print(f"Keine passende Windvariable in {filename} ds.keys(): {list(ds.keys())}")
+            continue
+        data = ds["max_i10fg"].values
+        data[data < 0] = np.nan
+        data = data * 3.6
     elif var_type == "pmsl":
         if "msl" not in ds:
             print(f"Keine prmsl-Variable in {filename} ds.keys(): {list(ds.keys())}")
@@ -374,7 +381,7 @@ for filename in sorted(os.listdir(data_dir)):
     # --------------------------
     # Figure (Deutschland oder Europa)
     # --------------------------
-    if var_type in ["pmsl_eu", "geo_eu", "t2m_eu", "ww_eu"]:
+    if var_type in ["pmsl_eu", "geo_eu", "t2m_eu", "ww_eu", "wind_eu"]:
         scale = 0.9
         fig = plt.figure(figsize=(FIG_W_PX/100*scale, FIG_H_PX/100*scale), dpi=100)
         shift_up = 0.02
@@ -394,7 +401,7 @@ for filename in sorted(os.listdir(data_dir)):
         ax.set_aspect('auto')
 
 
-    if var_type in ["pmsl_eu", "geo_eu", "t2m_eu", "ww_eu"]:
+    if var_type in ["pmsl_eu", "geo_eu", "t2m_eu", "ww_eu", "wind_eu"]:
         target_res = 0.10   # gröber für Europa (~11 km)
         lon_min, lon_max, lat_min, lat_max = extent_eu
         buffer = target_res * 20
@@ -475,43 +482,8 @@ for filename in sorted(os.listdir(data_dir)):
         im = ax.pcolormesh(lon, lat, data, cmap=snow_colors, norm=snow_norm, shading="auto")
     elif var_type == "wind":
         im = ax.pcolormesh(lon, lat, data, cmap=wind_colors, norm=wind_norm, shading="auto")
-         # ---- Windwerte anzeigen ----
-        contours = ax.contour(lon, lat, data, levels=wind_bounds, colors='black', linewidths=0.3, alpha=0.6)
-
-        n_labels = 40  # Anzahl der Textlabels
-        lon2d, lat2d = np.meshgrid(lon, lat)
-        lon_min, lon_max, lat_min, lat_max = extent
-
-        valid_mask = np.isfinite(data) & (lon2d >= lon_min) & (lon2d <= lon_max) & (lat2d >= lat_min) & (lat2d <= lat_max)
-        valid_indices = np.argwhere(valid_mask)
-
-        np.random.shuffle(valid_indices)
-        min_city_dist = 1.0  # Mindestabstand zu Städten (damit Texte sich nicht mit Städten überlappen)
-        texts = []
-        used_points = 0
-        tried_points = set()
-
-        while used_points < n_labels and len(tried_points) < len(valid_indices):
-            i, j = valid_indices[np.random.randint(0, len(valid_indices))]
-            if (i, j) in tried_points:
-                continue
-            tried_points.add((i, j))
-
-            lon_pt, lat_pt = lon[j], lat[i]
-
-            # Prüfen, ob Punkt zu nah an einer Stadt liegt
-            if any(np.hypot(lon_pt - city_lon, lat_pt - city_lat) < min_city_dist
-                for city_lon, city_lat in zip(cities['lon'], cities['lat'])):
-                continue
-
-            val = data[i, j]
-            txt = ax.text(lon_pt, lat_pt, f"{val:.0f}", fontsize=9,
-                        ha='center', va='center', color='black')
-            txt.set_path_effects([path_effects.withStroke(linewidth=1.5, foreground="white")])
-            texts.append(txt)
-            used_points += 1
-
-        adjust_text(texts, ax=ax, expand_text=(1.2, 1.2), arrowprops=None)
+    elif var_type == "wind_eu":
+        im = ax.pcolormesh(lon, lat, data, cmap=wind_colors, norm=wind_norm, shading="auto")
     elif var_type == "pmsl":
         # --- Luftdruck auf Meereshöhe (Deutschland) ---
         im = ax.pcolormesh(lon, lat, data, cmap=pmsl_colors, norm=pmsl_norm, shading="auto")
@@ -657,7 +629,7 @@ for filename in sorted(os.listdir(data_dir)):
     # Grenzen & Städte
     # ------------------------------
 
-    if var_type in ["pmsl_eu", "geo_eu", "t2m_eu", "ww_eu"]:
+    if var_type in ["pmsl_eu", "geo_eu", "t2m_eu", "ww_eu", "wind_eu"]:
         # 🌍 Europa: nur Ländergrenzen + europäische Städte
         ax.add_feature(cfeature.BORDERS.with_scale("10m"), edgecolor="black", linewidth=0.7)
         ax.add_feature(cfeature.COASTLINE.with_scale("10m"), edgecolor="black", linewidth=0.7)
@@ -692,8 +664,8 @@ for filename in sorted(os.listdir(data_dir)):
     # Legende
     legend_h_px = 50
     legend_bottom_px = 45
-    if var_type in ["t2m","tp_acc","cape_ml","dbz_cmax","wind","cloud", "pmsl", "pmsl_eu", "geo_eu", "t2m_eu", "snow"]:
-        bounds = t2m_bounds if var_type=="t2m" else tp_acc_bounds if var_type=="tp_acc" else wind_bounds if var_type=="wind"else pmsl_bounds_colors if var_type=="pmsl" else pmsl_bounds_colors if var_type=="pmsl_eu" else geo_bounds if var_type=="geo_eu" else t2m_bounds if var_type=="t2m_eu" else snow_bounds
+    if var_type in ["t2m","tp_acc","cape_ml","dbz_cmax","wind", "wind_eu","cloud", "pmsl", "pmsl_eu", "geo_eu", "t2m_eu", "snow"]:
+        bounds = t2m_bounds if var_type=="t2m" else tp_acc_bounds if var_type=="tp_acc" else wind_bounds if var_type=="wind"else wind_bounds if var_type=="wind_eu" else pmsl_bounds_colors if var_type=="pmsl" else pmsl_bounds_colors if var_type=="pmsl_eu" else geo_bounds if var_type=="geo_eu" else t2m_bounds if var_type=="t2m_eu" else snow_bounds
         cbar_ax = fig.add_axes([0.03, legend_bottom_px / FIG_H_PX, 0.94, legend_h_px / FIG_H_PX])
         cbar = fig.colorbar(im, cax=cbar_ax, orientation="horizontal", ticks=bounds)
         cbar.ax.tick_params(colors="black", labelsize=7)
@@ -735,6 +707,7 @@ for filename in sorted(os.listdir(data_dir)):
         "t2m_eu": "Temperatur 2m (°C), Europa",
         "tp_acc": "Akkumulierter Niederschlag (mm)",
         "wind": "Windböen (km/h)",
+        "wind_eu": "Windböen (km/h), Europa",
         "pmsl": "Luftdruck auf Meereshöhe (hPa)",
         "pmsl_eu": "Luftdruck auf Meereshöhe (hPa), Europa",
         "geo_eu": "Geopotentielle Höhe 500hPa (m), Europa",
