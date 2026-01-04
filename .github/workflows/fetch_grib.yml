@@ -56,7 +56,7 @@ jobs:
           wait
           python downloads/tp_acc.py &
           python downloads/snow.py &
-          python downlaods/wind.py &
+          python downloads/wind.py &
           wait
           
       - name: Upload GRIB2 as artifact
