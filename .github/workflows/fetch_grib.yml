@@ -64,7 +64,6 @@ jobs:
         with:
           name: grib2
           path: data/
-          retention-days: 1
 
       - name: Delete GRIB2 files (local cleanup)
         run: rm -rf data/
@@ -121,7 +120,6 @@ jobs:
         with:
           name: ifs-${{ matrix.variable }}
           path: ifs/${{ matrix.variable }}
-          retention-days: 1
 
   deploy_to_r2:
     runs-on: ubuntu-latest
