@@ -63,8 +63,6 @@ jobs:
 
           curl -fSL "${BASE_URL}/temperature_2m.om" -o "data/t2m/temperature_2m.om"
           curl -fSL "${BASE_URL}/wind_gusts_10m.om" -o "data/wind/wind_gusts_10m.om"
-          curl -fSL "${BASE_URL}/precipitation.om"  -o "data/tp/precipitation.om"
-
           
       - name: Upload data as artifact
         uses: actions/upload-artifact@v7
@@ -81,8 +79,8 @@ jobs:
     needs: fetch_and_generate
     strategy:
       matrix:
-        variable: [t2m, wind, tp]
-      max-parallel: 3
+        variable: [t2m, wind]
+      max-parallel: 2
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v7
@@ -146,6 +144,12 @@ jobs:
         run: |
           python scripts/generate_metadata.py ifs/${{ needs.fetch_and_generate.outputs.run }} ${{ needs.fetch_and_generate.outputs.run }} ${{ env.DATE }}
 
+      - name: Rohdateien mit gzip komprimieren
+        run: |
+          find ifs/${{ needs.fetch_and_generate.outputs.run }} -type f | while read -r f; do
+            gzip -9 -n -c "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+          done
+
       - name: Clean old runs on R2 except current
         run: |
           for run_folder in $(aws s3 ls s3://${{ secrets.R2_BUCKET }}/ifs/ --endpoint-url https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com | awk '{print $2}' | sed 's#/##'); do
@@ -161,7 +165,8 @@ jobs:
         run: |
           # Upload run folder
           aws s3 sync ./ifs/${{ needs.fetch_and_generate.outputs.run }}/ s3://${{ secrets.R2_BUCKET }}/ifs/${{ needs.fetch_and_generate.outputs.run }}/ \
-            --endpoint-url https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+            --endpoint-url https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com \
+            --content-type application/gzip
 
           # Upload metadata.json outside run folder
           aws s3 cp ./ifs/metadata.json s3://${{ secrets.R2_BUCKET }}/ifs/metadata.json \

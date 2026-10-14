@@ -1,25 +1,28 @@
 import sys
 import os
-import struct
-import zlib
+import gc
+import json
 import datetime as dt
 from zoneinfo import ZoneInfo
+
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
-import matplotlib
-matplotlib.use("Agg")
-from matplotlib.colors import ListedColormap, BoundaryNorm, LinearSegmentedColormap
-import matplotlib.colors as mcolors
-from PIL import Image
 from omfiles import OmFileReader
+
+from encoding_config import NODATA_U8, LEVELS, ENCODING
 
 # ------------------------------
 # Eingabe-/Ausgabe
 # ------------------------------
-data_dir = sys.argv[1]        # z.B. "output"
-output_dir = sys.argv[2]      # z.B. "output/maps"
-var_type = sys.argv[3]        # 't2m', 'wind', ...
+data_dir = sys.argv[1]        # z.B. "data/t2m"
+output_dir = sys.argv[2]      # z.B. "ifs/t2m"
+var_type = sys.argv[3]        # 't2m', 'wind', 'tp'
 os.makedirs(output_dir, exist_ok=True)
+
+if var_type not in ENCODING:
+    print(f"Unbekannter var_type {var_type}")
+    sys.exit(1)
+enc = ENCODING[var_type]
 
 # ------------------------------
 # var_type -> Substring, der im Dateinamen der zugehoerigen .om Datei steht
@@ -27,81 +30,19 @@ os.makedirs(output_dir, exist_ok=True)
 OM_FILENAME_PATTERNS = {
     "t2m": "temperature_2m",
     "wind": "wind_gusts_10m",
-    "tp": "precipitation",
 }
 
-# ------------------------------
-# Fuer welche Variablen die echten Werte zusaetzlich als DVAL-Chunk
-# ins WebP eingebettet werden sollen (kein separates File noetig).
-# ------------------------------
-EMBED_DATA_VARS = {"t2m", "wind"}
-
-# ------------------------------
-# Temperatur-Farben
-# ------------------------------
-t2m_bounds = list(range(-36, 50, 2))
-t2m_colors = LinearSegmentedColormap.from_list(
-    "t2m_smoooth",
-    [
-        "#F675F4", "#F428E9", "#B117B5", "#950CA2", "#640180",
-        "#3E007F", "#00337E", "#005295", "#1292FF", "#49ACFF",
-        "#8FCDFF", "#B4DBFF", "#B9ECDD", "#88D4AD", "#07A125",
-        "#3FC107", "#9DE004", "#E7F700", "#F3CD0A", "#EE5505",
-        "#C81904", "#AF0E14", "#620001", "#C87879", "#FACACA",
-        "#E1E1E1", "#6D6D6D"
-    ],
-    N=len(t2m_bounds)
-)
-t2m_norm = BoundaryNorm(t2m_bounds, ncolors=len(t2m_bounds))
-
-# ------------------------------
-# Windböen-Farben
-# ------------------------------
-wind_bounds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 180, 200, 220, 240, 260, 280, 300]
-wind_colors = ListedColormap([
-    "#68AD05", "#8DC00B", "#B1D415", "#D5E81C", "#FBFC22",
-    "#FAD024", "#F9A427", "#FC7929", "#FB4D2B", "#EA2B57",
-    "#FB22A5", "#FC22CE", "#FC22F5", "#FC62F8", "#FD80F8",
-    "#FFBFFC", "#FEDFFE", "#FEFFFF", "#E1E0FF", "#C3C3FF",
-    "#A5A5FF", "#A5A5FF", "#6868FE"
-])
-wind_norm = mcolors.BoundaryNorm(wind_bounds, wind_colors.N)
-
-# ------------------------------
-# Niederschlags-Farben 1h (tp)
-# ------------------------------
-prec_bounds = [0.0, 0.1, 0.2, 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-               12, 14, 16, 20, 24, 30, 40, 50, 60, 80, 100, 125]
-prec_colors = ListedColormap([
-    "#FFFFFF", "#B4D7FF", "#75BAFF", "#349AFF", "#0582FF", "#0069D2",
-    "#003680", "#148F1B", "#1ACF06", "#64ED07", "#FFF32B",
-    "#E9DC01", "#F06000", "#FF7F26", "#FFA66A", "#F94E78",
-    "#F71E53", "#BE0000", "#880000", "#64007F", "#C201FC",
-    "#DD66FE", "#EBA6FF", "#F9E7FF", "#D4D4D4"
-])
-prec_norm = mcolors.BoundaryNorm(prec_bounds, prec_colors.N)
-
-COLORMAPS = {
-    "t2m": (t2m_colors, t2m_norm),
-    "wind": (wind_colors, wind_norm),
-    "tp": (prec_colors, prec_norm),
-}
+pattern = OM_FILENAME_PATTERNS.get(var_type)
+if pattern is None:
+    print(f"var_type '{var_type}' hat noch kein Dateinamen-Muster in OM_FILENAME_PATTERNS")
+    sys.exit(1)
 
 # Umrechnung Rohwert -> Anzeige-Einheit, je Variable
 UNIT_CONVERT = {
     "t2m": lambda v: v - 273.15 if np.nanmax(v) > 200 else v,  # K -> °C, nur falls noetig
     "wind": lambda v: v * 3.6,  # m/s -> km/h
 }
-
-# Quantisierungsschritt je Variable fuer den eingebetteten DVAL-Chunk
-# (feiner als die Anzeige-Nachkommastellen, damit kein sichtbarer
-# Genauigkeitsverlust entsteht).
-QUANTUM_STEP = {
-    "t2m": 0.05,   # °C
-    "wind": 0.2,   # km/h
-}
-NAN_SENTINEL_I16 = -32768
-DVAL_FOURCC = b"DVAL"
+convert = UNIT_CONVERT.get(var_type, lambda v: v)
 
 # ------------------------------
 # Globale Bbox der Quelldateien (bestaetigt via crs_wkt-Kind der .om Datei)
@@ -110,152 +51,60 @@ GLOBAL_LAT_MIN, GLOBAL_LON_MIN = -90.0, -180.0
 GLOBAL_LAT_MAX, GLOBAL_LON_MAX = 90.0, 179.75
 
 # Speicherreihenfolge der Lat-Achse in der Datei (Zeile 0 = Norden oder Sueden?).
-# Per check_lat_order.py verifiziert: Zeile 0 = ~-52°C (Suedpol) -> aufsteigend gespeichert.
+# Verifiziert: Zeile 0 = Suedpol -> aufsteigend gespeichert.
 LAT_STORED_DESCENDING = False
 
-# Dimensionsreihenfolge im om-Array. Bestaetigt: shape=(721,1440,85), Zeit
-# ist die LETZTE Dimension (siehe auch 'coordinates'-Kind: "lat lon time").
-DIM_ORDER = ("lat", "lon", "time")
+# Dimensionsreihenfolge im om-Array: shape=(721,1440,ntime), Zeit ist die LETZTE Dimension.
 
 # ------------------------------
-# Bounding Box (wie im GRIB2-Skript)
+# Ausgaberaster (identisch zum ICON-D2-Raster)
 # ------------------------------
-extent = [-3.94, 20.34, 43.18, 58.08]  # lon_min, lon_max, lat_min, lat_max
+# regular-lat-lon, EPSG:4326, row0 = Norden, Werte = Pixelzzentren.
+# MUSS zu GRID in generate_metadata.py passen (dort wird die Dateigröße geprüft).
+GRID_LON_MIN, GRID_LAT_MIN, GRID_LON_MAX, GRID_LAT_MAX = -3.94, 43.18, 20.34, 58.08
+GRID_WIDTH, GRID_HEIGHT = 1215, 746
 
-# Bounding Box fuer den eingebetteten DVAL-Chunk (nur t2m/wind) - hier
-# reicht Deutschland + etwas Rand fuer Grenzregionen beim Hovern; das
-# Farbbild selbst bleibt unveraendert auf der vollen Domaene.
-GERMANY_BBOX_LONLAT = [5.5, 15.3, 47.0, 55.3]  # lon_min, lon_max, lat_min, lat_max
+# Ausschnitt, der aus dem globalen Gitter gelesen wird (= Ausgaberaster)
+extent = [GRID_LON_MIN, GRID_LON_MAX, GRID_LAT_MIN, GRID_LAT_MAX]  # lon_min, lon_max, lat_min, lat_max
 
-# ------------------------------
-# EPSG:4326 -> EPSG:3857 (Web Mercator)
-# ------------------------------
-EARTH_RADIUS = 6378137.0
-WEBMERCATOR_WIDTH = 1024
-
-
-def lonlat_to_webmercator(lon_deg, lat_deg):
-    x = EARTH_RADIUS * np.radians(lon_deg)
-    y = EARTH_RADIUS * np.log(np.tan(np.pi / 4 + np.radians(lat_deg) / 2))
-    return x, y
+lon_t = np.linspace(GRID_LON_MIN, GRID_LON_MAX, GRID_WIDTH)
+lat_t = np.linspace(GRID_LAT_MAX, GRID_LAT_MIN, GRID_HEIGHT)   # Nord -> Süd
+lat_tt, lon_tt = np.meshgrid(lat_t, lon_t, indexing="ij")      # Shape (HEIGHT, WIDTH)
+target_points = np.column_stack((lat_tt.ravel(), lon_tt.ravel()))
 
 
-def webmercator_target_grid(extent, out_width=WEBMERCATOR_WIDTH):
-    lon_min, lon_max, lat_min, lat_max = extent
-    x_min, y_min = lonlat_to_webmercator(lon_min, lat_min)
-    x_max, y_max = lonlat_to_webmercator(lon_max, lat_max)
-    aspect = (y_max - y_min) / (x_max - x_min)
-    out_height = max(int(round(out_width * aspect)), 1)
-    x_new = np.linspace(x_min, x_max, out_width)
-    y_new = np.linspace(y_min, y_max, out_height)  # aufsteigend: Süd -> Nord
-    return x_new, y_new
-
-
-def warp_equirect_to_webmercator(data, lon, lat, extent, method="linear", out_width=WEBMERCATOR_WIDTH):
-    """data/lon/lat: reguläres lat/lon-Gitter, lat und lon aufsteigend sortiert
-    (Zeile 0 = Süden)."""
-    x_new, y_new = webmercator_target_grid(extent, out_width=out_width)
-    xx, yy = np.meshgrid(x_new, y_new)
-    lon_grid = np.degrees(xx / EARTH_RADIUS)
-    lat_grid = np.degrees(2 * np.arctan(np.exp(yy / EARTH_RADIUS)) - np.pi / 2)
-
-    interp_func = RegularGridInterpolator(
-        (lat, lon), data, method=method, bounds_error=False, fill_value=np.nan
-    )
-    pts = np.array([lat_grid.ravel(), lon_grid.ravel()]).T
-    return interp_func(pts).reshape(lat_grid.shape)
-
-
-# Gleiches Ziel-Pixelraster wie in warp_equirect_to_webmercator (muss mit
-# WEBMERCATOR_WIDTH uebereinstimmen, damit die Indizes exakt passen) -
-# einmalig ausserhalb der Schleife berechnet, da pro Lauf identisch.
-_full_x_new, _full_y_new = webmercator_target_grid(extent, out_width=WEBMERCATOR_WIDTH)
-
-_gbx_min, _gby_min = lonlat_to_webmercator(GERMANY_BBOX_LONLAT[0], GERMANY_BBOX_LONLAT[2])
-_gbx_max, _gby_max = lonlat_to_webmercator(GERMANY_BBOX_LONLAT[1], GERMANY_BBOX_LONLAT[3])
-
-# Indizes im vollen Raster, die die Bbox gerade so umschliessen (lieber
-# ein Pixel zu viel als zu wenig - daher aussen aufrunden statt clippen).
-_col_i0 = max(0, np.searchsorted(_full_x_new, _gbx_min, side="left") - 1)
-_col_i1 = min(len(_full_x_new) - 1, np.searchsorted(_full_x_new, _gbx_max, side="right"))
-_row_i0 = max(0, np.searchsorted(_full_y_new, _gby_min, side="left") - 1)
-_row_i1 = min(len(_full_y_new) - 1, np.searchsorted(_full_y_new, _gby_max, side="right"))
-
-# Exakte Mercator-Extent des zugeschnittenen Rasters (= tatsaechliche
-# Gitterpunkte an den Raendern, nicht die rohe Bbox - damit die
-# Ruecktransformation im Frontend pixelgenau bleibt).
-GERMANY_CROP_EXTENT_3857 = [
-    float(_full_x_new[_col_i0]), float(_full_y_new[_row_i0]),
-    float(_full_x_new[_col_i1]), float(_full_y_new[_row_i1]),
-]
-
-
-def crop_to_germany(data_south_first):
-    """data_south_first: 2D-Array wie von warp_equirect_to_webmercator
-    zurückgegeben (row0 = Süden, aufsteigend in Mercator-Y wie
-    _full_y_new). Schneidet auf die Deutschland-Bbox zu."""
-    return data_south_first[_row_i0:_row_i1 + 1, _col_i0:_col_i1 + 1]
-
-
-def data_to_rgba(data, cmap, norm):
-    rgba = cmap(norm(data))
-    rgba = (rgba * 255).astype(np.uint8)
-    rgba[~np.isfinite(data), 3] = 0
-    return rgba
-
-
-def save_transparent_webp(data, cmap, norm, out_path):
-    rgba = data_to_rgba(data, cmap, norm)
-    img = Image.fromarray(rgba[::-1, :, :], mode="RGBA")  # Zeile 0 -> oben = Norden
-    img.save(out_path, format="WEBP", lossless=True, method=4)
-
-
-def embed_data_chunk(webp_path, data, extent_3857, quantum, fourcc=DVAL_FOURCC):
-    """Hängt ein rohes Datenfeld als privaten, int16-quantisierten RIFF-Chunk
-    an ein WebP an.
-
-    data: 2D-Array (float), row0 = Norden (also bereits wie fürs Bild
-          gespiegelt).
-    extent_3857: [x_min, y_min, x_max, y_max] in Web-Mercator-Metern -
-                 exakt das Raster, auf dem `data` liegt.
-    quantum: Rasterschritt in den Originaleinheiten (z.B. 0.05 für °C).
-    """
-    height, width = data.shape
-
+def encode_uint8(data, enc):
+    """float-Array (NaN erlaubt) -> uint8-Array (255 = NoData)."""
     nan_mask = ~np.isfinite(data)
-    data_filled = np.where(nan_mask, 0.0, data)  # verhindert NaN->int Warnung beim Runden/Casten
-    quant = np.round(data_filled / quantum)
-    # Sicherheitsclip: verhindert einen int16-Überlauf bei extremen
-    # Ausreißern, ohne das eigentlich zulässige Wertespektrum
-    # (t2m/wind liegen weit darunter) einzuschränken.
-    quant = np.clip(quant, -32767, 32767).astype(np.int16)
-    quant[nan_mask] = NAN_SENTINEL_I16
+    vmin, vmax, tr = enc["vmin"], enc["vmax"], enc["transform"]
+    d = np.where(nan_mask, vmin, data).astype(np.float64)
 
-    header = struct.pack("<BBII", 2, 1, width, height)
-    header += struct.pack("<4d", *extent_3857)
-    header += struct.pack("<d", quantum)
-    compressed = zlib.compress(np.ascontiguousarray(quant, dtype="<i2").tobytes(), level=9)
-    payload = header + compressed
+    if tr == "raw":
+        q = np.clip(np.rint(d), 0, LEVELS)
+    else:
+        d = np.clip(d, vmin, vmax)
+        if tr == "linear":
+            u = (d - vmin) / (vmax - vmin)
+        elif tr == "sqrt":
+            u = np.sqrt((d - vmin) / (vmax - vmin))
+        elif tr == "ssqrt":
+            u = (np.sign(d) * np.sqrt(np.abs(d) / vmax) + 1.0) / 2.0
+        else:
+            raise ValueError(tr)
+        q = np.rint(u * LEVELS)
 
-    size = len(payload)
-    chunk = fourcc + struct.pack("<I", size) + payload
-    if size % 2 == 1:
-        chunk += b"\x00"  # RIFF-Padding auf gerade Länge, zählt nicht zu size
+    q = q.astype(np.uint8)
+    q[nan_mask] = NODATA_U8
+    return q
 
-    with open(webp_path, "rb") as f:
-        content = f.read()
 
-    if content[0:4] != b"RIFF" or content[8:12] != b"WEBP":
-        raise ValueError(f"{webp_path} ist keine gültige WebP-Datei (RIFF/WEBP-Header fehlt)")
-
-    riff_size = struct.unpack("<I", content[4:8])[0]
-    new_riff_size = riff_size + len(chunk)
-
-    with open(webp_path, "wb") as f:
-        f.write(content[:4])
-        f.write(struct.pack("<I", new_riff_size))
-        f.write(content[8:])
-        f.write(chunk)
+def to_target_grid(data, lon, lat):
+    """Reguläres Quellgitter (lat aufsteigend, lon aufsteigend) -> Ausgaberaster
+    (HEIGHT, WIDTH), row0 = Norden, bilinear. Außerhalb des Quellgitters = NaN."""
+    interp = RegularGridInterpolator(
+        (lat, lon), data, method="linear", bounds_error=False, fill_value=np.nan
+    )
+    return interp(target_points).reshape(GRID_HEIGHT, GRID_WIDTH)
 
 
 def compute_crop_indices(nlat, nlon):
@@ -310,21 +159,6 @@ def load_valid_times(root, ntime, om_path):
 
 
 # ------------------------------
-# Farb-/Konvertierungs-Auswahl fuer den angeforderten var_type
-# ------------------------------
-if var_type not in COLORMAPS:
-    print(f"Unbekannter var_type {var_type}")
-    sys.exit(1)
-
-cmap, norm = COLORMAPS[var_type]
-convert = UNIT_CONVERT.get(var_type, lambda v: v)
-
-pattern = OM_FILENAME_PATTERNS.get(var_type)
-if pattern is None:
-    print(f"var_type '{var_type}' hat noch kein Dateinamen-Muster in OM_FILENAME_PATTERNS")
-    sys.exit(1)
-
-# ------------------------------
 # Dateien durchgehen
 # ------------------------------
 all_files_global = sorted(f for f in os.listdir(data_dir) if f.endswith(".om"))
@@ -333,6 +167,29 @@ matching_files = [f for f in all_files_global if pattern.lower() in f.lower()]
 if not matching_files:
     print(f"Keine .om Datei in {data_dir} gefunden, die zu '{pattern}' passt "
           f"(gefunden: {all_files_global})")
+
+meta = {
+    "var": var_type,
+    "unit": enc["unit"],
+    "dtype": "uint8",
+    "nodata": NODATA_U8,
+    "levels": LEVELS,
+    "transform": enc["transform"],
+    "vmin": enc["vmin"],
+    "vmax": enc["vmax"],
+    "decode": {
+        "linear": "v = vmin + (q/254) * (vmax - vmin)",
+        "sqrt": "v = vmin + (q/254)^2 * (vmax - vmin)",
+        "ssqrt": "u = q/254*2 - 1; v = sign(u) * u^2 * vmax",
+        "raw": "v = q",
+    }[enc["transform"]],
+    "orientation": "row0 = Norden, row-major, uint8",
+    "projection": "EPSG:4326",
+    "extent_4326": [GRID_LON_MIN, GRID_LAT_MIN, GRID_LON_MAX, GRID_LAT_MAX],
+    "width": GRID_WIDTH,
+    "height": GRID_HEIGHT,
+    "files": [],
+}
 
 for filename in matching_files:
     om_path = os.path.join(data_dir, filename)
@@ -349,7 +206,7 @@ for filename in matching_files:
         row_start, row_end, col_start, col_end, lat_res, lon_res = compute_crop_indices(nlat, nlon)
         lat_crop, lon_crop = crop_lat_lon_arrays(row_start, row_end, col_start, col_end, lat_res, lon_res, nlat)
 
-        # Ganzen Europa-Ausschnitt fuer ALLE Zeitschritte auf einmal lesen -
+        # Ganzen Ausschnitt fuer ALLE Zeitschritte auf einmal lesen -
         # passt zum Chunk-Layout (Zeitachse wird ohnehin komplett pro Chunk
         # gespeichert), spart also viele einzelne read_array-Aufrufe.
         data_all = root.read_array((
@@ -364,32 +221,34 @@ for filename in matching_files:
             data = convert(np.asarray(data_all[:, :, t_idx], dtype=np.float64))
 
             if LAT_STORED_DESCENDING:
-                data = data[::-1, :]  # Zeile 0 -> Sueden, wie warp_equirect erwartet
+                data = data[::-1, :]  # Zeile 0 -> Sueden, wie RegularGridInterpolator erwartet
                 lat_asc = lat_crop[::-1]
             else:
                 lat_asc = lat_crop
 
             # ------------------------------
-            # Nach EPSG:3857 (Web Mercator) umprojizieren
+            # Quellgitter -> Ausgaberaster -> uint8
             # ------------------------------
-            render_data_merc = warp_equirect_to_webmercator(data, lon_crop, lat_asc, extent, method="linear")
+            grid_data = to_target_grid(data, lon_crop, lat_asc)   # row0 = Norden
+            q = encode_uint8(grid_data, enc)
 
-            # ------------------------------
-            # Transparentes WebP speichern
-            # ------------------------------
-            outname = f"{var_type}_{valid_times_utc[t_idx].astimezone(ZoneInfo('Europe/Berlin')):%Y%m%d_%H%M}.webp"
+            valid_time_local = valid_times_utc[t_idx].astimezone(ZoneInfo("Europe/Berlin"))
+            outname = f"{var_type}_{valid_time_local:%Y%m%d_%H%M}"
             out_path = os.path.join(output_dir, outname)
-            save_transparent_webp(render_data_merc, cmap, norm, out_path)
+            np.ascontiguousarray(q, dtype=np.uint8).tofile(out_path)
 
-            # Fuer t2m/wind zusaetzlich die echten physikalischen Werte
-            # (°C bzw. km/h, nicht die Farben) als privaten RIFF-Chunk
-            # direkt ins WebP einbetten - row0 = Norden, damit der Chunk
-            # 1:1 zur Bildorientierung passt (das Bild wird in
-            # save_transparent_webp beim Speichern gespiegelt,
-            # render_data_merc selbst hat row0 = Sueden).
-            if var_type in EMBED_DATA_VARS:
-                germany_data = crop_to_germany(render_data_merc)          # row0 = Süden
-                quantum = QUANTUM_STEP.get(var_type, 0.1)
-                embed_data_chunk(out_path, germany_data[::-1], GERMANY_CROP_EXTENT_3857, quantum)  # row0 = Norden
+            meta["files"].append({
+                "file": outname,
+                "valid_time_utc": valid_times_utc[t_idx].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "valid_time_local": valid_time_local.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            })
 
-            print(f"{filename} t_idx={t_idx} -> {outname}")
+            print(f"{filename} t_idx={t_idx} -> {outname} ({GRID_WIDTH}x{GRID_HEIGHT}, {q.nbytes} Bytes)")
+
+            del data, grid_data, q
+
+        del data_all
+        gc.collect()
+
+print("META: " + json.dumps(meta, ensure_ascii=False))
+print("Fertig!")
